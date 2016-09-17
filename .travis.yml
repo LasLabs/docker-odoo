@@ -1,0 +1,24 @@
+sudo: required
+
+language: python
+
+services:
+  - docker
+
+env:
+  matrix:
+    - ODOO_VERSION="10.0"
+    - ODOO_VERSION="9.0"
+    - ODOO_VERSION="8.0"
+
+before_install:
+  - docker pull kiasaki/alpine-postgres
+  - docker run -d -e POSTGRES_USER=odoo -e POSTGRES_PASSWORD=odoo --name db kiasaki/alpine-postgres
+
+install:
+  - docker build -t $TRAVIS_BUILD_NUMBER $TRAVIS_BUILD_DIR/
+
+script:
+  - docker run -d -p 8069:8069 --name $TRAVIS_BUILD_NUMBER --link db:db -t $TRAVIS_BUILD_NUMBER
+  - sleep 5  # Let Odoo boot
+  - curl --fail http://localhost:8069/web
