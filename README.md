@@ -134,7 +134,7 @@ The simplest `docker-compose.yml` file would look like:
     version: '2'
     services:
       web:
-        image: docker pull laslabs/alpine-odoo
+        image: docker pull laslabs/alpine-odoo:latest
         depends_on:
           - db
         ports:
@@ -145,6 +145,56 @@ The simplest `docker-compose.yml` file would look like:
           - POSTGRES_PASSWORD=odoo
           - POSTGRES_USER=odoo
 
+On the other hand, it is also possible to launch multiple Odoo versions at
+once:
+
+    version: '2'
+    services:
+      web10:
+        image: docker pull laslabs/alpine-odoo:10.0
+        depends_on:
+          - db10
+        ports:
+          - "8070:8069"
+        environment:
+          - HOST=db10
+          - USER=odoo10
+          - PASSWORD=odoo10
+      db10:
+        image: kiasaki/alpine-postgres:9.6
+        environment:
+          - POSTGRES_PASSWORD=odoo10
+          - POSTGRES_USER=odoo10
+      web9:
+        image: docker pull laslabs/alpine-odoo:9.0
+        depends_on:
+          - db9
+        ports:
+          - "8069:8069"
+        environment:
+          - HOST=db9
+          - USER=odoo9
+          - PASSWORD=odoo9
+      db9:
+        image: kiasaki/alpine-postgres:9.5
+        environment:
+          - POSTGRES_PASSWORD=odoo9
+          - POSTGRES_USER=odoo9
+      web8:
+        image: docker pull laslabs/alpine-odoo:8.0
+        depends_on:
+          - db8
+        ports:
+          - "8068:8069"
+        environment:
+          - HOST=db8
+          - USER=odoo8
+          - PASSWORD=odoo8
+      db8:
+        image: kiasaki/alpine-postgres:9.4
+        environment:
+          - POSTGRES_PASSWORD=odoo9
+          - POSTGRES_USER=odoo9
 
 
 Known Issues / Roadmap
