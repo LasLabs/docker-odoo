@@ -44,10 +44,23 @@ You can use any Postgres server or Docker image for this. We will use
 Start an Odoo Instance
 ----------------------
 
-    docker run -p 8069:8069 --name odoo --link db:db -t laslabs/alpine-odoo
+The below command will run a container with the latest version of Odoo:
 
-The alias of the container running Postgres must be db for Odoo to be able
- to connect to the Postgres server.
+    docker run -p 8069:8069 --name odoo --link db:db -t laslabs/alpine-odoo:latest
+
+You can run different versions by using the appropriate tag:
+
+    # Version 10
+    docker run -p 8069:8069 --name odoo --link db:db -t laslabs/alpine-odoo:10.0
+    # Version 9
+    docker run -p 8069:8069 --name odoo --link db:db -t laslabs/alpine-odoo:9.0
+    # Version 8
+    docker run -p 8069:8069 --name odoo --link db:db -t laslabs/alpine-odoo:8.0
+
+The alias of the container running Postgres must be `db` for Odoo to be able
+ to connect to the Postgres server by using default options. See the [Environment
+ Variables](#environment-variables) section for more information on how to change
+ this.
 
 Stop and Restart an Odoo Instance
 ---------------------------------
