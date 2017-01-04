@@ -20,13 +20,18 @@ ADDONS=("/usr/lib/python2.7/site-packages/openerp/addons" \
 
 # Install requirements.txt and oca_dependencies.txt from root of mount
 if [[ "${SKIP_DEPENDS}" != "1" ]] ; then
+
     export VERSION=$ODOO_VERSION
     clone_oca_dependencies /opt/community /mnt/addons
+
+    # Iterate the newly cloned addons & add into possible dirs
     for dir in /opt/community/*/ ; do
         ADDONS+=("$dir")
     done
-    ADDONS="$(get_addons ${ADDONS[*]})"
-    DB_ARGS+=("--addons-path=${ADDONS}")
+
+    VALID_ADDONS="$(get_addons ${ADDONS[*]})"
+    DB_ARGS+=("--addons-path=${VALID_ADDONS}")
+
 fi
 
 # Pull database from config file if present & validate
@@ -57,7 +62,7 @@ case "$1" in
         exec odoo "$@" "${DB_ARGS[@]}"
         ;;
     *)
-        exec "$@"
+        "$@"
 esac
 
 exit 1
