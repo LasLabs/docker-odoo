@@ -1,7 +1,10 @@
 # Copyright 2016-TODAY LasLabs Inc.
 # License MIT (https://opensource.org/licenses/MIT).
 
-FROM alpine:3.4
+# Some of this taken from https://github.com/Tecnativa/odoo/blob/docker/Dockerfile
+# @TODO: Submit upstream PR with changes & move out the duplicate logic.
+
+FROM python:2-alpine
 MAINTAINER "LasLabs Inc." <support@laslabs.com>
 
 ARG ODOO_VERSION="10.0"
@@ -17,74 +20,96 @@ ENV ODOO_LOG="/var/log/odoo.log"
 ENV ODOO_CONFIG="${ODOO_CONFIG_DIR}/${ODOO_CONFIG_FILE}"
 ENV WKHTMLTOX_RELEASE="${WKHTMLTOX_VERSION}.${WKHTMLTOX_SUBVERSION}"
 ENV WKHTMLTOX_URI="http://download.gna.org/wkhtmltopdf/${WKHTMLTOX_VERSION}/${WKHTMLTOX_RELEASE}/wkhtmltox-${WKHTMLTOX_RELEASE}_linux-generic-amd64.tar.xz"
-ENV ODOO_URI="https://github.com/$ODOO_REPO/archive/${ODOO_BRANCH:-${ODOO_VERSION}}.tar.gz"
-ENV MQT_URI="https://github.com/OCA/maintainer-quality-tools/archive/master.tar.gz"
+ENV ODOO_URI="https://github.com/${ODOO_REPO}/archive/${ODOO_VERSION}.tar.gz"
+
+# https://github.com/OCA/maintainer-quality-tools/pull/404
+ENV MQT_URI="https://github.com/LasLabs/maintainer-quality-tools/archive/bugfix/script-shebang.tar.gz"
+
+RUN echo "$ODOO_URI"
 
 # Set this as an env var instead of arg so its avail to entrypoint
 ENV ODOO_VERSION=$ODOO_VERSION
 
-# Odoo Binary Dependencies
-RUN set -x; \
-    apk add --no-cache \
-        alpine-sdk \
-        bash \
-        build-base \
-        curl \
-        ca-certificates \
-        freetype \
-        freetype-dev \
-        fontconfig \
-        git \
-        jpeg \
-        jpeg-dev \
-        libffi \
-        libffi-dev \
-        libxml2 \
-        libxml2-dev \
-        libxslt \
-        libxslt-dev \
-        linux-headers \
+# Other requirements and recommendations to run Odoo
+# See https://github.com/$ODOO_SOURCE/blob/$ODOO_VERSION/debian/control
+RUN apk add --no-cache \
+        ghostscript \
+        icu \
+        libev \
         nodejs \
-        openldap-dev \
-        openssl-dev \
-        postgresql \
-        postgresql-client \
-        postgresql-dev \
-        python \
-        python-dev \
-        tar \
-        xvfb \
-        xz \
-        zlib \
-        zlib-dev
+        openssl \
+        postgresql-libs \
+        poppler-utils \
+        ruby \
+        su-exec
 
-# Install Pip
-RUN curl --silent --show-error --retry 5 https://bootstrap.pypa.io/get-pip.py | python
+# Special case for wkhtmltox
+# HACK https://github.com/wkhtmltopdf/wkhtmltopdf/issues/3265
+# Idea from https://hub.docker.com/r/loicmahieu/alpine-wkhtmltopdf/
+# Use prepackaged wkhtmltopdf and wrap it with a dummy X server
+RUN apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/testing wkhtmltopdf
+RUN apk add --no-cache xvfb ttf-dejavu ttf-freefont fontconfig dbus
+COPY bin/wkhtmltox.sh /usr/local/bin/wkhtmltoimage
+RUN ln /usr/local/bin/wkhtmltoimage /usr/local/bin/wkhtmltopdf
 
-# Wkhtmltox Headless Using XVFB
-RUN curl -sL $WKHTMLTOX_URI \
-    | tar -xJ \
-    && mkdir /opt \
-    && cp wkhtmltox/bin/* /opt/ \
-    && rm -Rf wkhtmltox* \
-    && echo -e '#!/bin/bash\nxvfb-run -a --server-args="-screen 0, 1024x768x24" /opt/wkhtmltopdf -q $*' > /usr/bin/wkhtmltopdf \
-    && echo -e '#!/bin/bash\nxvfb-run -a --server-args="-screen 0, 1024x768x24" /opt/wkhtmltoimage -q $*' > /usr/bin/wkhtmltoimage \
-    && chmod a+x /usr/bin/wkhtmltopdf \
-    && chmod a+x /usr/bin/wkhtmltoimage
-
-# Install NPM depends
-RUN npm install -g clean-css \
-                   less
+# Requirements to build Odoo dependencies
+RUN apk add --no-cache --virtual .build-deps \
+    curl \
+    # Common to all Python packages
+    build-base \
+    python-dev \
+    # lxml
+    libxml2-dev \
+    libxslt-dev \
+    # Pillow
+    freetype-dev \
+    jpeg-dev \
+    lcms2-dev \
+    openjpeg-dev \
+    tar \
+    tcl-dev \
+    tiff-dev \
+    tk-dev \
+    zlib-dev \
+    # psutil
+    linux-headers \
+    # psycopg2
+    postgresql \
+    postgresql-dev \
+    # python-ldap
+    openldap-dev \
+    # Sass, compass
+    libffi-dev \
+    ruby-dev \
+    # CSS preprocessors
+    && gem install --no-document bootstrap-sass compass \
+    && npm install -g less \
+    # Build and install Odoo dependencies with pip
+    # HACK Some modules cannot be installed with PYTHONOPTIMIZE=2
+    && PYTHONOPTIMIZE=1 pip install --no-cache-dir \
+        # HACK https://github.com/giampaolo/psutil/issues/948
+        psutil==2.2.0 \
+        # HACK https://github.com/erocarrera/pydot/issues/145
+        pydot==1.0.2 \
+        # HACK https://github.com/psycopg/psycopg2/commit/37d80f2c0325951d3ee6b07caf7d343d4a97a23d
+        # TODO Remove in psycopg2>=2.6
+        psycopg2==2.5.4 \
+        # HACK https://github.com/eventable/vobject/pull/19
+        # TODO Remove in vobject>=0.9.3
+        vobject==0.6.6 \
+    && CFLAGS="$CFLAGS -L/lib" pip install --no-cache-dir pillow
 
 # Install Odoo
-RUN adduser -S odoo
+RUN adduser -D odoo
 
 RUN mkdir -p /tmp/odoo \
     && mkdir -p /opt/odoo \
-    && curl -sL $ODOO_URI \
-    | tar xz -C /tmp/odoo --strip 1 \
-    && cd /tmp/odoo \
-    && pip install --no-cache-dir -r ./requirements.txt \
+    && curl -sL "$ODOO_URI" \
+    | tar xz -C /tmp/odoo --strip 1
+
+WORKDIR /tmp/odoo
+
+RUN pip install --no-cache-dir -r ./requirements.txt \
     && pip install --no-cache-dir . \
     && mv ./addons /opt/odoo \
     && chown -R odoo /opt/odoo
@@ -95,7 +120,7 @@ RUN mkdir -p /etc/odoo \
              /opt/community \
              /var/lib/odoo \
              /var/log/odoo \
-    && ln -sf /dev/stdout $ODOO_LOG \
+    && ln -sf /dev/stdout "$ODOO_LOG" \
     && chown odoo -R /etc/odoo \
                      /mnt/addons \
                      /opt/addons \
@@ -106,33 +131,44 @@ RUN mkdir -p /etc/odoo \
 # Symlink old binaries to new location
 RUN if [ "$ODOO_VERSION" != "10.0" ]; \
     then \
-        ln -s /usr/bin/openerp-server /usr/bin/odoo; \
+        ln -s /usr/local/bin/openerp-server /usr/local/bin/odoo; \
     fi
 
 # OCA Repos
-RUN curl -sL $MQT_URI \
+RUN curl -sL "$MQT_URI" \
     | tar -xz -C /opt/ \
-    && ln -s /opt/maintainer-quality-tools-master/travis/clone_oca_dependencies /usr/bin \
-    && ln -s /opt/maintainer-quality-tools-master/travis/getaddons.py /usr/bin/get_addons \
+    && ln -s /opt/maintainer-quality-tools-*/travis/clone_oca_dependencies /usr/bin \
+    && ln -s /opt/maintainer-quality-tools-*/travis/getaddons.py /usr/bin/get_addons \
     && chmod +x /usr/bin/get_addons
 
 # Remove unneeded build dependencies
 RUN rm -Rf /tmp/odoo \
     && cp /usr/bin/pg_dump /tmp \
     && cp /usr/bin/pg_restore /tmp \
-    && apk del curl \
-               linux-headers \
-               postgresql \
+    && apk del .build-deps \
     && mv /tmp/pg_dump /usr/bin/pg_dump \
     && mv /tmp/pg_restore /usr/bin/pg_restore
 
-# Copy Entrypoint & Odoo conf
-COPY ./docker-entrypoint.sh /entrypoint.sh
-COPY ./etc/odoo-server.conf $ODOO_CONFIG
+# Patched git-aggregator
+RUN pip install --no-cache-dir https://github.com/Tecnativa/git-aggregator/archive/master-depth.zip
+# HACK Install git >= 2.11, to have --shallow-since
+# TODO Remove HACK when python:2-alpine is alpine >= v3.5
+RUN apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/v3.5/main git
 
-RUN chown odoo /entrypoint.sh \
-    && chmod +x /entrypoint.sh \
-    && chown odoo -R $ODOO_CONFIG_DIR
+# WDB debugger
+RUN pip install --no-cache-dir wdb
+
+# Other facilities
+RUN apk add --no-cache bash gettext postgresql-client
+RUN pip install --no-cache-dir openupgradelib
+
+# Copy Entrypoint & Odoo conf
+COPY ./docker-entrypoint.sh /docker-entrypoint.sh
+COPY ./etc/odoo-server.conf "$ODOO_CONFIG"
+
+RUN chown odoo /docker-entrypoint.sh \
+    && chmod +x /docker-entrypoint.sh \
+    && chown odoo -R "$ODOO_CONFIG_DIR"
 
 # Mount Volumes
 VOLUME ["/var/lib/odoo", "/mnt/addons"]
@@ -140,9 +176,6 @@ VOLUME ["/var/lib/odoo", "/mnt/addons"]
 # Expose Odoo services
 EXPOSE 8069 8071
 
-# Set default user when running the container
-# USER odoo
-
 # Entrypoint & Cmd
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["odoo"]

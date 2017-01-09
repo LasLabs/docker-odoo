@@ -8,25 +8,30 @@ services:
 env:
   global:
     - DOCKER_REPO="laslabs/alpine-odoo"
-    - PROD_BRANCH="master"
+    - DOCKER_TAG="latest"
+    - BRANCH_PROD="master"
+    - PORTS="8069:8069"
+    - LINKS="db:db"
+    - DAEMONIZE="1"
+
   matrix:
-    - ODOO_VERSION="10.0"
-    - ODOO_VERSION="9.0"
+    - TESTS="1" ODOO_VERSION="10.0" BUILD_ARGS="ODOO_VERSION=10.0"
+    - TESTS="1" ODOO_VERSION="9.0" BUILD_ARGS="ODOO_VERSION=9.0"
+    - LINT_CHECK="1"
+    - HUB="1" ODOO_VERSION="10.0" DOCKER_TAG="10.0" BUILD_ARGS="ODOO_VERSION=10.0"
+    - HUB="1" ODOO_VERSION="9.0" DOCKER_TAG="9.0" BUILD_ARGS="ODOO_VERSION=9.0"
 
 before_install:
   - docker pull kiasaki/alpine-postgres
   - docker run -d -e POSTGRES_USER="odoo" -e POSTGRES_PASSWORD="odoo" --name="db" kiasaki/alpine-postgres
 
 install:
-  - docker build --tag="${DOCKER_REPO}:${ODOO_VERSION}" --build-arg ODOO_VERSION=$ODOO_VERSION $TRAVIS_BUILD_DIR/
+  - git clone --depth=1 https://github.com/LasLabs/docker-quality-tools.git ${HOME}/docker-quality-tools
+  - export PATH=${HOME}/docker-quality-tools/travis:${PATH}
+  - travis_install_all
 
 script:
-  - docker run -d -t --publish="8069:8069" --name="$TRAVIS_BUILD_NUMBER" --link="db:db" "${DOCKER_REPO}:${ODOO_VERSION}"
-  - sleep 5  # Let Odoo boot
-  - curl --fail http://localhost:8069/web
+  - travis_run_all
 
 after_success:
-  - 'if [ "$TRAVIS_BRANCH" == "$PROD_BRANCH" ] && [ "$TRAVIS_PULL_REQUEST" == "false" ]; \
-      then \
-        docker login -u="$DOCKER_USER" -p="$DOCKER_PASS" && docker push $DOCKER_REPO:$ODOO_VERSION; \
-      fi'
+  - travis_after_success_all

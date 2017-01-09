@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+# Copyright 2016 LasLabs Inc.
+# License MIT or later (https://opensource.org/licenses/MIT).
+
+# This script will test that $FILE_PATH exists on the server.
+
+set -e
+
+OUTPUT=`docker exec -i -t $DOCKER_CONTAINER_ID ls -l $ODOO_CONFIG`
+
+echo $OUTPUT | grep -q "$ODOO_CONFIG"
+
+echo "Container $DOCKER_CONTAINER_ID has file $ODOO_CONFIG"
