@@ -36,10 +36,10 @@ Start a Postgres Server
 -----------------------
 
 You can use any Postgres server or Docker image for this. We will use
- [kiasaki/alpine-postgres](https://hub.docker.com/r/kiasaki/alpine-postgres/) here:
+ [the official Postgres image](https://hub.docker.com/_/postgres/) here:
 
-    docker pull kiasaki/alpine-postgres
-    docker run -d -e POSTGRES_USER=odoo -e POSTGRES_PASSWORD=odoo --name db kiasaki/alpine-postgres:9.6
+    docker pull postgres:9.6-alpine
+    docker run -d -e POSTGRES_USER=odoo -e POSTGRES_PASSWORD=odoo --name db postgres:9.6-alpine
 
 Start an Odoo Instance
 ----------------------
@@ -171,7 +171,7 @@ The simplest `docker-compose.yml` file would look like:
         ports:
           - "8069:8069"
       db:
-        image: kiasaki/alpine-postgres:9.6
+        image: postgres:9.6-alpine
         environment:
           - POSTGRES_PASSWORD=odoo
           - POSTGRES_USER=odoo
