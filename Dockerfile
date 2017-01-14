@@ -25,14 +25,13 @@ ENV ODOO_URI="https://github.com/${ODOO_REPO}/archive/${ODOO_VERSION}.tar.gz"
 # https://github.com/OCA/maintainer-quality-tools/pull/404
 ENV MQT_URI="https://github.com/LasLabs/maintainer-quality-tools/archive/bugfix/script-shebang.tar.gz"
 
-RUN echo "$ODOO_URI"
-
 # Set this as an env var instead of arg so its avail to entrypoint
 ENV ODOO_VERSION=$ODOO_VERSION
 
 # Other requirements and recommendations to run Odoo
 # See https://github.com/$ODOO_SOURCE/blob/$ODOO_VERSION/debian/control
 RUN apk add --no-cache \
+        git \
         ghostscript \
         icu \
         libev \
@@ -57,6 +56,7 @@ RUN apk add --no-cache --virtual .build-deps \
     curl \
     # Common to all Python packages
     build-base \
+    tar \
     python-dev \
     # lxml
     libxml2-dev \
@@ -66,7 +66,6 @@ RUN apk add --no-cache --virtual .build-deps \
     jpeg-dev \
     lcms2-dev \
     openjpeg-dev \
-    tar \
     tcl-dev \
     tiff-dev \
     tk-dev \
@@ -82,7 +81,7 @@ RUN apk add --no-cache --virtual .build-deps \
     libffi-dev \
     ruby-dev \
     # CSS preprocessors
-    && gem install --no-document bootstrap-sass compass \
+    && gem install --clear-sources --no-document bootstrap-sass compass \
     && npm install -g less \
     # Build and install Odoo dependencies with pip
     # HACK Some modules cannot be installed with PYTHONOPTIMIZE=2
@@ -96,8 +95,7 @@ RUN apk add --no-cache --virtual .build-deps \
         psycopg2==2.5.4 \
         # HACK https://github.com/eventable/vobject/pull/19
         # TODO Remove in vobject>=0.9.3
-        vobject==0.6.6 \
-    && CFLAGS="$CFLAGS -L/lib" pip install --no-cache-dir pillow
+        vobject==0.6.6
 
 # Install Odoo
 RUN adduser -D odoo
@@ -134,26 +132,23 @@ RUN if [ "$ODOO_VERSION" != "10.0" ]; \
         ln -s /usr/local/bin/openerp-server /usr/local/bin/odoo; \
     fi
 
+# Upgrade pillow, old versions cause zlib issues for some reason
+RUN CFLAGS="$CFLAGS -L/lib" pip install --no-cache-dir --upgrade pillow
+
 # OCA Repos
-RUN curl -sL "$MQT_URI" \
-    | tar -xz -C /opt/ \
+RUN curl -sL "$MQT_URI" | tar -xz -C /opt/ \
     && ln -s /opt/maintainer-quality-tools-*/travis/clone_oca_dependencies /usr/bin \
     && ln -s /opt/maintainer-quality-tools-*/travis/getaddons.py /usr/bin/get_addons \
     && chmod +x /usr/bin/get_addons
 
 # Remove unneeded build dependencies
-RUN rm -Rf /tmp/odoo \
-    && cp /usr/bin/pg_dump /tmp \
-    && cp /usr/bin/pg_restore /tmp \
-    && apk del .build-deps \
-    && mv /tmp/pg_dump /usr/bin/pg_dump \
-    && mv /tmp/pg_restore /usr/bin/pg_restore
-
-# Patched git-aggregator
-RUN pip install --no-cache-dir https://github.com/Tecnativa/git-aggregator/archive/master-depth.zip
-# HACK Install git >= 2.11, to have --shallow-since
-# TODO Remove HACK when python:2-alpine is alpine >= v3.5
-RUN apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/v3.5/main git
+# Re-enable once better binary dependency resolution
+#RUN rm -Rf /tmp/odoo \
+#    && cp /usr/bin/pg_dump /tmp \
+#    && cp /usr/bin/pg_restore /tmp \
+#    && apk del .build-deps \
+#    && mv /tmp/pg_dump /usr/bin/pg_dump \
+#    && mv /tmp/pg_restore /usr/bin/pg_restore
 
 # WDB debugger
 RUN pip install --no-cache-dir wdb
