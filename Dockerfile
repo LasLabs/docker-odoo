@@ -126,12 +126,6 @@ RUN mkdir -p /etc/odoo \
                      /var/lib/odoo \
                      /var/log/odoo
 
-# Symlink old binaries to new location
-RUN if [ "$ODOO_VERSION" != "10.0" ]; \
-    then \
-        ln -s /usr/local/bin/openerp-server /usr/local/bin/odoo; \
-    fi
-
 # Upgrade pillow, old versions cause zlib issues for some reason
 RUN CFLAGS="$CFLAGS -L/lib" pip install --no-cache-dir --upgrade pillow
 
@@ -164,6 +158,19 @@ COPY ./etc/odoo-server.conf "$ODOO_CONFIG"
 RUN chown odoo /docker-entrypoint.sh \
     && chmod +x /docker-entrypoint.sh \
     && chown odoo -R "$ODOO_CONFIG_DIR"
+
+# Move binary to new location and symlink old
+RUN if [ "$ODOO_VERSION" != "10.0" ]; \
+    then \
+        mv /usr/local/bin/openerp-server /usr/local/bin/odoo && \
+        ln -s /usr/local/bin/odoo /usr/local/bin/openerp-server; \
+    fi
+
+# Fix stack size overflow
+# https://github.com/python-pillow/Pillow/issues/1935
+RUN awk '/import odoo/ { print; print "import threading; threading.stack_size(4*80*1024)"; next }1' /usr/local/bin/odoo > /tmp-bin \
+    && mv /tmp-bin /usr/local/bin/odoo \
+    && chmod +x /usr/local/bin/odoo
 
 # Mount Volumes
 VOLUME ["/var/lib/odoo", "/mnt/addons"]
